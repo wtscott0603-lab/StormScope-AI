@@ -1,0 +1,12 @@
+aiosqlite==0.21.0
+apscheduler==3.10.4
+arm_pyart==2.1.1
+boto3==1.37.11
+geojson==3.2.0
+httpx==0.28.1
+numpy==2.2.4
+Pillow==11.1.0
+pydantic-settings==2.8.1
+pyproj==3.7.1
+scipy==1.15.2
+shapely==2.1.0

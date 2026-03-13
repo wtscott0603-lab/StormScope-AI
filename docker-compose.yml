@@ -1,0 +1,65 @@
+x-service-defaults: &service-defaults
+  env_file:
+    - path: .env.example
+      required: true
+    - path: .env
+      required: false
+  restart: unless-stopped
+
+services:
+  processor:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: backend/processor/Dockerfile
+    volumes:
+      - radar-cache:/data/cache
+      - radar-db:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import json, os, sys; from datetime import datetime, timedelta, timezone; from pathlib import Path; state_path = Path('/data/cache/status/processor_state.json'); state = json.loads(state_path.read_text()) if state_path.exists() else {}; updated_at = state.get('updated_at'); status = state.get('status'); parsed = datetime.fromisoformat(updated_at.replace('Z', '+00:00')) if updated_at else None; limit = timedelta(seconds=max(int(os.environ.get('UPDATE_INTERVAL_SEC', '120')) * 3, 180)); ok = status in {'starting', 'running', 'success'} and parsed is not None and (datetime.now(timezone.utc) - parsed) <= limit; sys.exit(0 if ok else 1)\""
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+  api:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: backend/api/Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - radar-cache:/data/cache:ro
+      - radar-db:/data/db
+    depends_on:
+      processor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+  frontend:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/config.js"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+volumes:
+  radar-cache:
+  radar-db:
